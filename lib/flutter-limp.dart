@@ -1,18 +1,23 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:steel_crypt/steel_crypt.dart';
 import 'package:union/union.dart';
-
-
+import 'package:http/http.dart' as http;
 import 'package:web_socket_channel/io.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:jaguar_jwt/jaguar_jwt.dart';
 import 'package:rxdart/subjects.dart';
 import 'package:crypto/crypto.dart';
+
+
+import 'package:path/path.dart';
+import 'package:async/async.dart';
 
 
 class utils {
@@ -31,7 +36,7 @@ class SDKConfig {
   List<String> authAttrs;
   bool debug;
   num fileChunkSize;
-  num authHashLevel ;
+  String authHashLevel ;
 
 SDKConfig();
 }
@@ -265,7 +270,7 @@ ApiService() {
     this.config.anonToken = token;
     this.config.authAttrs = authattr;
     this.config.debug = debug;
-    this.config.authHashLevel = 5.6;
+    this.config.authHashLevel = '6.1';
 
 
     conn = new WebsocketConnetion(api);
@@ -324,7 +329,7 @@ ApiService() {
   }
 
   void heartBeat() async{
-    this.call('heart/beat', {});
+    this.newcall('heart/beat', {});
       Future.delayed(Duration(seconds: 30),(){
         if(heartbeat) this.heartBeat();
       });
@@ -405,6 +410,29 @@ StreamController<dynamic> newcall(String endpoint, dynamic callArgs,[ bool await
       'doc' : callArgs['doc'] != null ? callArgs['doc'] : {},
       'call_id' : utils.CreateCryptoRandomString().substring(5,11).toLowerCase()
     };
+    print(apiCall);
+
+
+    //// file upload////
+    Stream fileUpload;
+    List<File> files;
+    if( callArgs['doc'] != null)
+    callArgs['doc'].forEach((key,value){
+      if(value[0].runtimeType.toString() == '_File'){
+
+        print(value);
+        files =  value;
+        callArgs['doc'][key] = [];
+
+        files.forEach((file){
+          callArgs['doc'][key].add(file.path.split('/')[file.path.split('/').length -1]);
+
+           this.uploadFile(file, apiCall, key);          
+          
+        });
+
+      }
+    });
 
     final subject = BehaviorSubject<bool>();
     Stream strm = subject.stream;
@@ -427,8 +455,8 @@ StreamController<dynamic> newcall(String endpoint, dynamic callArgs,[ bool await
          // print('jwt token ${sJWT}');
         this.conn.websocket.sink.add(jsonEncode({
            "token" : sJWT,
-           "call_id" : apiCall['call_id'] }));
-        //  });
+           "call_id" : apiCall['call_id'] 
+           }));
     } else {
       if(awaitAuth){
         this.authQueue.add(apiCall);
@@ -461,6 +489,58 @@ StreamController<dynamic> newcall(String endpoint, dynamic callArgs,[ bool await
     ) ;
 
     return call;
+  }
+
+  Future uploadFile(File _image, dynamic callArgs, String attr ) async {
+
+          var url =this.config.api.replaceFirst('ws', 'http').replaceAll('/ws', '') + '/file/create' ;
+        //   // Uri.parse( this.config.api.replaceFirst('ws', 'http').replaceAll('/ws', '') + '/file/create' );//`${this.config.api.replace('ws', 'http').replace('/ws', '')}/file/create`;
+
+          var dio = Dio();
+          dio.interceptors.add(LogInterceptor(responseBody: true));
+          
+          FormData formData = new FormData.fromMap({
+
+            "__module" : callArgs['endpoint'].split('/')[0],     // { name: "__module", value: callArgs.endpoint.split('/')[0] },
+						"__attr" : attr,    // 		{ name: "__attr", value: attr },
+						"name" : _image.path.split('/')[_image.path.split('/').length -1],    // 		{ name: "name", value: files[attr][i].name },
+						"type" : 'image/jpeg',    // 		{ name: "type", value: files[attr][i].type },
+						"lastModified" : (new DateTime.now().millisecondsSinceEpoch / 1000).toString().split('.')[0],    // 		{ name: "lastModified", value: (Number(new Date().getTime())/1000).toFixed(0) },
+						// 		{ name: "file", filename : files[attr][i].path }
+						
+            "file": await MultipartFile.fromFile(_image.path,filename: _image.path.split('/')[_image.path.split('/').length -1]), ///nother exception was thrown: type 'String' is not a subtype of type 'File' of 'value'
+          });
+
+          print('start upload file.... ${(new DateTime.now().millisecondsSinceEpoch / 1000).toString().split('.')[0]}');
+          var response = await dio.post(url, data: formData, 
+            options: Options(
+             headers: {
+              'Content-Type': 'multipart/form-data',
+							'X-Auth-Bearer': callArgs['sid'],
+							'X-Auth-Token': callArgs['token'],
+							'X-Auth-App': 'this.config.appId',
+            }
+          )
+        );
+
+        print('file upload results.... $response');
+
+      // var stream = new http.ByteStream(DelegatingStream.typed(_image.openRead()));
+      // var length = await _image.length();
+
+      // var request = new http.MultipartRequest("POST", Uri.parse(url));
+      // var multipartFile = new http.MultipartFile(
+      //   'fileToUpload', stream, length,
+      //     filename: basename(_image.path)
+      //     );
+      //     //contentType: new MediaType('image', 'png'));
+      // print('start uploading file...');
+      // request.files.add(multipartFile);
+      // var response = await request.send();
+      // print(response.statusCode);
+      // response.stream.transform(utf8.decoder).listen((value) {
+      //   print( 'result of file upload.... $value');
+      // });
   }
 
 
@@ -509,20 +589,48 @@ void auth(String authVar,String authVal,String password){
 		// }
 
 		dynamic doc= { "hash": this.generateAuthHash(authVar, authVal, password) };
-		// doc[authVar] = authVal;
+		doc[authVar] = authVal;
     // doc = jsonEncode(doc);
+    print('doc of auth.... ${doc}');
+
+    
 
 // "doc": {  eyJleHAiOjE1ODI3MDI0OTgsImhhc2giOlsicGhvbmUiLCIrOTIzMDQxMjgzNjg1IiwiMTIzNDU2NzgiLCJfX1FBUlRfQU5PTl9mMDAwMDAwMDAwMDAwMDAwMDAwMDAwMTIiXSwiaWF0IjoxNTgyNjE2MDk4fQ
 //  "hash": "eyJoYXNoIjpbInBob25lIiwiKzkyMzA0MTI4MzY4NSIsIjEyMzQ1Njc4IiwiX19RQVJUX0FOT05fZjAwMDAwMDAwMDAwMDAwMDAwMDAwMDEyIl19",
 //  "phone": "+923041283685"
 //  },
     // print('doc values is ${doc}');
-		this.call('session/auth',{
-      "doc": doc // need to chage with new hashes
+
+		this.newcall('session/auth',{
+      "doc": doc //need to chage with new hashes
       });
 	
   } 
   
+  // generateAuthHash(authVar: string, authVal: string, password: string): string {
+
+	// 	if (this.config.authAttrs.indexOf(authVar) == -1 && authVar != 'token') {
+	// 		throw new Error(`Unkown authVar '${authVar}'. Accepted authAttrs: '${this.config.authAttrs.join(', ')}, token'`)
+	// 	}
+
+	// 	if (this.config.authHashLevel != '6.1') {
+	// 		let oHeader = { alg: 'HS256', typ: 'JWT' };
+	// 		let sHeader = JSON.stringify(oHeader);
+	// 		let hashObj = [authVar, authVal, password];
+	// 		if (this.config.authHashLevel == '5.6') {
+	// 			hashObj.push(this.config.anonToken);
+	// 		}
+	// 		let sPayload = JSON.stringify({ hash: hashObj });
+	// 		let sJWT = JWS.sign('HS256', sHeader, sPayload, { utf8: password });
+	// 		return sJWT.split('.')[1];
+	// 	} else {
+	// 		if (!password.match(/^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.{8,})/)  ) {
+	// 			throw new Error('Password should be 8 chars, contains one lower-case char, one upper-case char, one number at least.');
+	// 		}
+	// 		return `${authVar}${authVal}${password}${this.config.anonToken}`;
+	// 	}
+	// }
+
   String generateAuthHash( String authVar,String authVal,String password) {
     
     var passHash = PassCrypt('SHA-512/HMAC/PBKDF2');
@@ -530,24 +638,32 @@ void auth(String authVar,String authVal,String password){
 
     print( 'new cryto key is ${keycryp}');  
   
-  
-		List<String> hashObj = [authVar, authVal, password, this.config.anonToken]; // one thing
-		// if (this.config.authHashLevel == 5.6) {
-		// 	hashObj.add(this.config.anonToken);
-		// }
-		final sPayload = {
-      "hash" : hashObj
-    };    // second thing after that we generte 
-		// var sJWT = JWS.sign('HS256', sHeader, sPayload, { utf8: password });
-    final key = this.config.anonToken;
-    final claimSet = new JwtClaim(
-      expiry: new DateTime.now(),
-      issuedAt: null,
-      otherClaims: <String,dynamic>{...sPayload},
-      );
 
-      String sJWT = issueJwtHS256(claimSet, key);
-		return sJWT.split('.')[1];
+    if(config.authHashLevel != '6.1'){
+        List<String> hashObj = [authVar, authVal, password, this.config.anonToken]; // one thing
+		    // if (this.config.authHashLevel == 5.6) {
+		    // 	hashObj.add(this.config.anonToken);
+		    // }
+		    final sPayload = {
+          "hash" : hashObj
+        };    // second thing after that we generte 
+		    // var sJWT = JWS.sign('HS256', sHeader, sPayload, { utf8: password });
+        final key = this.config.anonToken;
+        final claimSet = new JwtClaim(
+          expiry: new DateTime.now(),
+          issuedAt: null,
+          otherClaims: <String,dynamic>{...sPayload},
+          );
+          String sJWT = issueJwtHS256(claimSet, key);
+		    return sJWT.split('.')[1];
+    } else { 
+      // if (!password.contains(new RegExp(r'/^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.{8,})/'))) {
+			// 	throw("Password should be 8 chars, contains one lower-case char, one upper-case char, one number at least.");
+			// }
+			// return `${authVar}${authVal}${password}${this.config.anonToken}`;
+      return authVar+ authVal+password+this.config.anonToken;
+    }
+		
 	}
 
 

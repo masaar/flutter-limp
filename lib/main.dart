@@ -1,8 +1,10 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutterapp/flutter-limp.dart';
 import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:jaguar_jwt/jaguar_jwt.dart';
@@ -28,8 +30,8 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   int _counter = 0;
 
-  String url = "wss://ip/ws";
-  String token = "token";
+  String url =  "wss://limp-sample-app.azurewebsites.net/ws";
+  String token = "__ANON_TOKEN_f00000000000000000000012";
   String connectionStatus = 'none';
 
   String result = 'results';
@@ -90,17 +92,66 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
-  
+  File _image;
+  Future pickimage() async {
+  var image = await ImagePicker.pickImage(source: ImageSource.gallery);
+    setState(() {
+    _image = image;
+    });
+  }
 
   closeConnection(){
   this.api.close();
 }
-login(){
-  this.api.auth("phone", "+000000000", "00000000");
+  login(){
+  this.api.auth("email", "ADMIN@LIMP.MASAAR.COM", "__ADMINx0");
 }
-logout(){
+  logout(){
     this.api.signOut();
 }
+  fileUpload(){
+    dynamic doc = {
+      'name': {
+          'ar_AE': 'ali',
+          'en_AE':'ali'
+      },
+      'jobtitle': {
+           'ar_AE': 'ali',
+          'en_AE':'ali'
+      },
+      'bio': {
+          'ar_AE': 'ali',
+          'en_AE':'ali'
+      },
+      'photo': [this._image]  
+    };
+
+    
+    List<File> abcd =  [this._image, this._image, this._image] ;
+    abcd.forEach((element){ print('element.path');});
+    // doc.forEach((key,value){
+    //     print(value);
+    //     print(value.runtimeType);
+    //     // if(value[0].runtimeType.toString() == 'String'){
+    //     //   List<String> abcd = value;
+    //     //   print('list value $abcd');
+    //     // abcd.forEach((element) => print(element));
+    //   // }  
+    // });
+
+
+  
+
+    this.api.newcall('staff/create', {'doc' : doc}).stream.listen(
+      (res){
+          print(res);
+      }, onError: (err){
+        print(err);
+      }, onDone: (){
+        print('upload call complete');
+      }
+    );
+  }
   void readCall() {
 
     Stream stream = this.api.newcall('call/read', {}, true).stream;
@@ -188,7 +239,23 @@ logout(){
                       child : Text('logout'),
                       onPressed: logout
                     )
-                  ],),
+                  ],
+                  ),
+                   Row( 
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: <Widget>[
+                    RaisedButton(
+                      child: Text('select File'),
+                      onPressed: pickimage ),
+                    Container(
+                      width: 10,
+                    ),
+                    RaisedButton(
+                      child : Text('Upload'),
+                      onPressed: fileUpload
+                    )
+                  ],
+                  ),
                   Text(
                     'Connection Status: $connectionStatus',                  
                   ), Text (
