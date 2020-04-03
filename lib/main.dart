@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutterapp/flutter-limp.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+import 'package:rxdart/rxdart.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:jaguar_jwt/jaguar_jwt.dart';
@@ -128,7 +129,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
     
     List<File> abcd =  [this._image, this._image, this._image] ;
-    abcd.forEach((element){ print('element.path');});
+    // abcd.forEach((element){ print('element.path');});
     // doc.forEach((key,value){
     //     print(value);
     //     print(value.runtimeType);
@@ -139,18 +140,26 @@ class _MyHomePageState extends State<MyHomePage> {
     //   // }  
     // });
 
+    
+    CombineLatestStream(
+      [
+        Stream.fromIterable(['a']),
+        Stream.fromIterable(['b']),
+        Stream.fromIterable(['C', 'D'])
+      ],
+      (values) => values.last
+    )
+    .listen(print);
 
-  
-
-    this.api.newcall('staff/create', {'doc' : doc}).stream.listen(
-      (res){
-          print(res);
-      }, onError: (err){
-        print(err);
-      }, onDone: (){
-        print('upload call complete');
-      }
-    );
+    // this.api.newcall('staff/create', {'doc' : doc}).stream.listen(
+    //   (res){
+    //       print(res);
+    //   }, onError: (err){
+    //     print(err);
+    //   }, onDone: (){
+    //     print('upload call complete');
+    //   }
+    // );
   }
   void readCall() {
 

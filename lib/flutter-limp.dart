@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:steel_crypt/steel_crypt.dart';
@@ -400,8 +401,8 @@ ApiService() {
         "call_id" : apiCall['call_id'] }));
   }
 
-StreamController<dynamic> newcall(String endpoint, dynamic callArgs,[ bool awaitAuth = false]){
-          print('start calling new call..');
+StreamController<dynamic> newcall(String endpoint, dynamic callArgs,[ bool awaitAuth = false]) {
+    print('start calling new call..');
     dynamic apiCall = {
       'endpoint' : endpoint != null? endpoint : callArgs['endpoint'],
       'sid' : (this.cache.getString('sid') != null)? this.cache.getString('sid'): "f00000000000000000000012",
@@ -414,8 +415,9 @@ StreamController<dynamic> newcall(String endpoint, dynamic callArgs,[ bool await
 
 
     //// file upload////
-    Stream fileUpload;
+    List<Stream> fileUploads = [];
     List<File> files;
+
     if( callArgs['doc'] != null)
     callArgs['doc'].forEach((key,value){
       if(value[0].runtimeType.toString() == '_File'){
@@ -424,18 +426,57 @@ StreamController<dynamic> newcall(String endpoint, dynamic callArgs,[ bool await
         files =  value;
         callArgs['doc'][key] = [];
 
-        files.forEach((file){
-          callArgs['doc'][key].add(file.path.split('/')[file.path.split('/').length -1]);
 
-           this.uploadFile(file, apiCall, key);          
+       files.forEach((file) async {
+         BehaviorSubject<dynamic> upload = new BehaviorSubject<dynamic>();
+          // fileUploads.add(upload.stream);
+          callArgs['doc'][key].add(file.path.split('/')[file.path.split('/').length -1]);
+          
+          print('start uploading .......');
+          var url =this.config.api.replaceFirst('ws', 'http').replaceAll('/ws', '') + '/file/create' ;
+
+          var dio = Dio();
+          dio.interceptors.add(LogInterceptor(responseBody: true));
+          
+          FormData formData = new FormData.fromMap({
+            "__module" : apiCall['endpoint'].split('/')[0],     
+						"__attr" : key,    
+						"name" : file.path.split('/')[file.path.split('/').length -1],
+						"type" : 'image/jpeg', 
+						"lastModified" : (new DateTime.now().millisecondsSinceEpoch / 1000).toString().split('.')[0],  						
+            "file": await MultipartFile.fromFile(file.path,filename: file.path.split('/')[file.path.split('/').length -1]), ///nother exception was thrown: type 'String' is not a subtype of type 'File' of 'value'
+          });
+
+
+          var response;
+          try {
+            response= await dio.post(url, data: formData, 
+            options: Options(
+             headers: {
+              'Content-Type': 'multipart/form-data',
+							'X-Auth-Bearer': apiCall['sid'],
+							'X-Auth-Token': apiCall['token'],
+							'X-Auth-App': 'this.config.appId',
+            }
+           ),
+           );
+          } on DioError catch (e) {
+            if(e.response != null){
+              print(e.response.data);
+            } else print(e.message);
+          }
+
+          // callArgs.doc[attr][i] = { __file: res.args.docs[0]._id };
+          callArgs['doc'][key][0] = {'__file' : response.data['args']['docs'][0]['_id']};
+          
+          upload.add(response.data);
+          upload.close();
+          print('file upload results.... ${response.data['args']['docs'][0]['_id']}');   
           
         });
 
       }
     });
-
-    final subject = BehaviorSubject<bool>();
-    Stream strm = subject.stream;
 
     if(this.inited && awaitAuth && this.authed) print('first...');
 
@@ -444,7 +485,8 @@ StreamController<dynamic> newcall(String endpoint, dynamic callArgs,[ bool await
     if(endpoint == 'conn/verify') print('third...');
 
     if ((this.inited && awaitAuth && this.authed) || (this.inited && !awaitAuth) || endpoint == 'conn/verify') {
-      // CombineLatestStream([this.conn.websocket.stream], (combiner){
+     
+      CombineLatestStream(fileUploads, (combiner){
 
         print('new call combine latest part...');
          final claimSet = new JwtClaim(
@@ -457,6 +499,7 @@ StreamController<dynamic> newcall(String endpoint, dynamic callArgs,[ bool await
            "token" : sJWT,
            "call_id" : apiCall['call_id'] 
            }));
+      });
     } else {
       if(awaitAuth){
         this.authQueue.add(apiCall);
@@ -491,27 +534,22 @@ StreamController<dynamic> newcall(String endpoint, dynamic callArgs,[ bool await
     return call;
   }
 
-  Future uploadFile(File _image, dynamic callArgs, String attr ) async {
+  Future<dynamic> uploadFile(File _image, dynamic callArgs, String attr ) async {
 
           var url =this.config.api.replaceFirst('ws', 'http').replaceAll('/ws', '') + '/file/create' ;
-        //   // Uri.parse( this.config.api.replaceFirst('ws', 'http').replaceAll('/ws', '') + '/file/create' );//`${this.config.api.replace('ws', 'http').replace('/ws', '')}/file/create`;
 
           var dio = Dio();
           dio.interceptors.add(LogInterceptor(responseBody: true));
           
           FormData formData = new FormData.fromMap({
-
-            "__module" : callArgs['endpoint'].split('/')[0],     // { name: "__module", value: callArgs.endpoint.split('/')[0] },
-						"__attr" : attr,    // 		{ name: "__attr", value: attr },
-						"name" : _image.path.split('/')[_image.path.split('/').length -1],    // 		{ name: "name", value: files[attr][i].name },
-						"type" : 'image/jpeg',    // 		{ name: "type", value: files[attr][i].type },
-						"lastModified" : (new DateTime.now().millisecondsSinceEpoch / 1000).toString().split('.')[0],    // 		{ name: "lastModified", value: (Number(new Date().getTime())/1000).toFixed(0) },
-						// 		{ name: "file", filename : files[attr][i].path }
-						
+            "__module" : callArgs['endpoint'].split('/')[0],     
+						"__attr" : attr,    
+						"name" : _image.path.split('/')[_image.path.split('/').length -1],
+						"type" : 'image/jpeg', 
+						"lastModified" : (new DateTime.now().millisecondsSinceEpoch / 1000).toString().split('.')[0],  						
             "file": await MultipartFile.fromFile(_image.path,filename: _image.path.split('/')[_image.path.split('/').length -1]), ///nother exception was thrown: type 'String' is not a subtype of type 'File' of 'value'
           });
 
-          print('start upload file.... ${(new DateTime.now().millisecondsSinceEpoch / 1000).toString().split('.')[0]}');
           var response = await dio.post(url, data: formData, 
             options: Options(
              headers: {
@@ -525,24 +563,8 @@ StreamController<dynamic> newcall(String endpoint, dynamic callArgs,[ bool await
 
         print('file upload results.... $response');
 
-      // var stream = new http.ByteStream(DelegatingStream.typed(_image.openRead()));
-      // var length = await _image.length();
-
-      // var request = new http.MultipartRequest("POST", Uri.parse(url));
-      // var multipartFile = new http.MultipartFile(
-      //   'fileToUpload', stream, length,
-      //     filename: basename(_image.path)
-      //     );
-      //     //contentType: new MediaType('image', 'png'));
-      // print('start uploading file...');
-      // request.files.add(multipartFile);
-      // var response = await request.send();
-      // print(response.statusCode);
-      // response.stream.transform(utf8.decoder).listen((value) {
-      //   print( 'result of file upload.... $value');
-      // });
+        return response;
   }
-
 
   void close(){
     this.call('conn/close',{
