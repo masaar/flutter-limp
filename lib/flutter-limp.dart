@@ -485,7 +485,21 @@ StreamController<dynamic> newcall(String endpoint, dynamic callArgs,[ bool await
     if(endpoint == 'conn/verify') print('third...');
 
     if ((this.inited && awaitAuth && this.authed) || (this.inited && !awaitAuth) || endpoint == 'conn/verify') {
-     
+      print('pre combineLatest...');
+     Rx.combineLatestList(fileUploads).doOnDone((){
+        print('new call combine latest part...');
+         final claimSet = new JwtClaim(
+         otherClaims: <String,dynamic>{...apiCall},
+         maxAge: const Duration(minutes: 2)
+         );
+         String sJWT = issueJwtHS256(claimSet, apiCall['token']);
+         // print('jwt token ${sJWT}');
+        this.conn.websocket.sink.add(jsonEncode({
+           "token" : sJWT,
+           "call_id" : apiCall['call_id'] 
+           }));
+       
+     }).listen(null);
       CombineLatestStream(fileUploads, (combiner){
 
         print('new call combine latest part...');
