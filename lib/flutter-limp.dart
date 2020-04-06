@@ -288,13 +288,19 @@ ApiService() {
 
         if(res["args"]["code"] == "CORE_CONN_READY"){
           this.reset();
-          this.call('conn/verify',{});
+          this.config.anonToken = '__ANON_TOKEN_f00000000000000000000012';
+          this.newcall('conn/verify',{});
 
         } else if( res["args"]["code"] == "CORE_CONN_OK"){
           print('connection is ready to use....');
           this.inited = true;
           this.inited$.add(true);
 
+          try {
+            this.checkAuth();
+          } catch (e) {
+            print(e);
+          }
         } else if( res["args"]["code"] =="CORE_CONN_CLOSED"){
           this.reset();
 
@@ -340,7 +346,7 @@ ApiService() {
       });
   }
   reset({bool forceInited = false}){
-    this.cache.clear();
+    // this.cache.clear();
 			this.authed = false;
 			if (this.session != null) {
 				this.session = null;
@@ -409,8 +415,8 @@ StreamController<dynamic> newcall(String endpoint, dynamic callArgs,[ bool await
     print('start calling new call.. ');
     dynamic apiCall = {
       'endpoint' : endpoint != null? endpoint : callArgs['endpoint'],
-      'sid' : (this.cache.getString('sid') != null)? this.cache.getString('sid'): "f00000000000000000000012",
-      'token' : (this.cache.getString('token') != null)? this.cache.getString('token') : this.config.anonToken,
+      'sid' :  (this.authed)? this.cache.getString('sid'): "f00000000000000000000012",
+      'token' : (this.authed)? this.cache.getString('token') : this.config.anonToken,
       'query' : callArgs['query']!=null? callArgs['query'] : [] ,
       'doc' : callArgs['doc'] != null ? callArgs['doc'] : {},
       'call_id' : utils.CreateCryptoRandomString().substring(5,11).toLowerCase()
@@ -601,7 +607,7 @@ StreamController<dynamic> newcall(String endpoint, dynamic callArgs,[ bool await
       'query' : [],
       'doc' : {}
     });
-    this.cache.clear();
+    // this.cache.clear();
   }
 
 void deleteWatch({String watch}){
@@ -616,11 +622,11 @@ void deleteWatch({String watch}){
 		// let sHeader = JSON.stringify(oHeader);
 		// let sPayload = JSON.stringify({ token: token });
 		// let sJWT = JWS.sign('HS256', sHeader, sPayload, { utf8: token });
-      final claimSet = new JwtClaim(
-        otherClaims: <String,dynamic>{},
-        maxAge: const Duration(minutes: 2)
-      );
-      String token = issueJwtHS256(claimSet, this.config.anonToken);
+      // final claimSet = new JwtClaim(
+      //   otherClaims: <String,dynamic>{},
+      //   maxAge: const Duration(minutes: 2)
+      // );
+      // String token = issueJwtHS256(claimSet, this.config.anonToken);
 		// let call: Observable<Res<Doc>> = this.call('session/reauth', {
 		// 	sid: 'f00000000000000000000012',
 		// 	token: this.config.anonToken,
@@ -628,10 +634,23 @@ void deleteWatch({String watch}){
 		// 		{ _id: sid || 'f00000000000000000000012', hash: sJWT.split('.')[1] }
 		// 	]
 		// });
-
-      this.call('',{
-        sid : 'f00000000000000000000012'
-      });
+      print('start reauth ....');
+      this.newcall('session/reauth',{
+        "sid" : 'f00000000000000000000012',
+        "token" : this.config.anonToken,
+        "query" : [{ "_id": sid , "token": token }]
+		// 	]]
+      }).stream.listen(
+        (res){
+          print('reauth successfull....$res');
+        }, onError: (err){
+          this.cache.remove('sid');
+          this.cache.remove('token');
+          print(err);
+        }, onDone: (){
+          print('reauth done...');
+        }
+      );
 	}
 
 
@@ -737,9 +756,8 @@ void signOut(){
 
 void checkAuth() {
     // need some work here for hashes.
-    print("check authrisation .....");
-  	if (!this.cache.get('token') || !this.cache.get('sid')) throw new Error();
-  	var call = this.reauth(this.cache.get('sid'), this.cache.get('token'));
-  	return call;
+    print("check authrisation .....${this.cache.get('token')}  ${this.cache.get('sid')}");
+  	if (this.cache.get('token') == null || this.cache.get('sid') == null) throw('re auth error...');
+  	this.reauth(this.cache.get('sid'), this.cache.get('token'));
   }
 }
