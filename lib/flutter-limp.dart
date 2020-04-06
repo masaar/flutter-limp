@@ -262,6 +262,10 @@ ApiService() {
 
   }
 
+  printLog(String log){
+      print(log);
+  }
+
   sharedPre() async{
     this.cache = await  SharedPreferences.getInstance();
   }
@@ -555,9 +559,6 @@ StreamController<dynamic> newcall(String endpoint, dynamic callArgs,[ bool await
 
   Future<dynamic> uploadFile(File _image, dynamic callArgs, String attr ) async {
 
-    StreamController<dynamic> call = new StreamController<dynamic>();
-
-
           var url =this.config.api.replaceFirst('ws', 'http').replaceAll('/ws', '') + '/file/create' ;
 
           var dio = Dio();
@@ -591,7 +592,6 @@ StreamController<dynamic> newcall(String endpoint, dynamic callArgs,[ bool await
           //   } else print(e.message);
           // }
         print('file upload results.... $response');
-        call.add(response);
 
         return response;
   }
@@ -635,27 +635,32 @@ void deleteWatch({String watch}){
 	}
 
 
-void auth(String authVar,String authVal,String password){
+StreamController<dynamic> auth(String authVar,String authVal,String password){
 		// if (this.config.authAttrs.indexOf(authVar) == -1) {
 		// 	throw new Error(`Unkown authVar '${authVar}'. Accepted authAttrs: '${this.config.authAttrs.join(', ')}'`);
 		// }
+    StreamController<dynamic> call = new StreamController<dynamic>();
 
 		dynamic doc= { "hash": this.generateAuthHash(authVar, authVal, password) };
 		doc[authVar] = authVal;
     // doc = jsonEncode(doc);
     print('doc of auth.... ${doc}');
 
-    
-
-// "doc": {  eyJleHAiOjE1ODI3MDI0OTgsImhhc2giOlsicGhvbmUiLCIrOTIzMDQxMjgzNjg1IiwiMTIzNDU2NzgiLCJfX1FBUlRfQU5PTl9mMDAwMDAwMDAwMDAwMDAwMDAwMDAwMTIiXSwiaWF0IjoxNTgyNjE2MDk4fQ
-//  "hash": "eyJoYXNoIjpbInBob25lIiwiKzkyMzA0MTI4MzY4NSIsIjEyMzQ1Njc4IiwiX19RQVJUX0FOT05fZjAwMDAwMDAwMDAwMDAwMDAwMDAwMDEyIl19",
-//  "phone": "+923041283685"
-//  },
-    // print('doc values is ${doc}');
-
 		this.newcall('session/auth',{
       "doc": doc //need to chage with new hashes
-      });
+      }).stream.listen(
+        (res){
+          call.add(res);
+          call.close();
+        }, onError: (err){
+          call.addError(err);
+          call.close();
+        },
+        onDone: (){
+          call.close();
+        }
+      );
+      return call;
 	
   } 
   

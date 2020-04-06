@@ -105,7 +105,15 @@ class _MyHomePageState extends State<MyHomePage> {
   this.api.close();
 }
   login(){
-  this.api.auth("email", "ADMIN@LIMP.MASAAR.COM", "__ADMINx0");
+  this.api.auth("email", "ADMIN@LIMP.MASAAR.COM", "__ADMINx0").stream.listen(
+    (res){
+        print('login done.. $res');
+    }, onError: (err){
+      print(err);
+    },onDone: (){
+      print('done...');
+    }
+  );
 }
   logout(){
     this.api.signOut();
