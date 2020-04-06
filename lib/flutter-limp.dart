@@ -432,15 +432,16 @@ StreamController<dynamic> newcall(String endpoint, dynamic callArgs,[ bool await
 
         apiCall['doc'][key] = [];
 
-        files.forEach((file)   {
+
+        files.forEach((file){
         //  BehaviorSubject<dynamic> upload = new BehaviorSubject<dynamic>();
           // fileUploads.add(upload.stream);
-          apiCall['doc'][key].add(file.path.split('/')[file.path.split('/').length -1]);
+          // apiCall['doc'][key].add(file.path.split('/')[file.path.split('/').length -1]);
           Stream upload = this.uploadFile(file, apiCall, key).asStream().asBroadcastStream();
           fileUploads.add(upload);
           upload.listen(
             (res){
-              apiCall['doc'][key][0] = {'__file' : res.data['args']['docs'][0]['_id']};
+              apiCall['doc'][key].add( {'__file' : res.data['args']['docs'][0]['_id']} );
             },onDone: (){}
           );
           
@@ -506,7 +507,7 @@ StreamController<dynamic> newcall(String endpoint, dynamic callArgs,[ bool await
       print('pre combineLatest...$apiCall');
       CombineLatestStream(fileUploads, (combiner){
 
-        // print('new call combine latest part...${apiCall}  $combiner');
+        print('new call combine latest part...${apiCall}  $combiner');
          final claimSet = new JwtClaim(
          otherClaims: <String,dynamic>{...apiCall},
          maxAge: const Duration(minutes: 2)

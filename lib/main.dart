@@ -124,64 +124,9 @@ class _MyHomePageState extends State<MyHomePage> {
           'ar_AE': 'ali',
           'en_AE':'ali'
       },
-      'photo': [this._image]  
+      'photo': [this._image, this._image]  
     };
-
     
-    List<File> abcd =  [this._image, this._image, this._image] ;
-    // abcd.forEach((element){ print('element.path');});
-    // doc.forEach((key,value){
-    //     print(value);
-    //     print(value.runtimeType);
-    //     // if(value[0].runtimeType.toString() == 'String'){
-    //     //   List<String> abcd = value;
-    //     //   print('list value $abcd');
-    //     // abcd.forEach((element) => print(element));
-    //   // }  
-    // });
-
-    List<Stream> fileUploads = [];
-
-    BehaviorSubject<String> sub1 = new BehaviorSubject<String>();
-    BehaviorSubject<String> sub2 = new BehaviorSubject<String>();
-    BehaviorSubject<String> sub3 = new BehaviorSubject<String>();
-
-    Stream strm1 =  sub1.stream;
-    Stream strm2 =  sub2.stream;
-    Stream strm3 =  sub3.stream;
-
-    // fileUploads.addAll([strm1]);
-    
-    CombineLatestStream(
-      fileUploads,
-      (values)=> values.last
-    ).listen(
-      (data){
-        print('data receive$data');
-      },
-      onDone: (){
-        print('done listiner');
-      }, onError: (err){
-        print('error msg');
-      }
-    );
-
-    // Rx.combineLatestList(fileUploads).doOnDone((){
-    //   print('done....');
-    // }).listen(null);
-
-  fileUploads.add(strm3);
-    Future.delayed(new Duration(seconds: 1), (){
-      sub1.add('frist event..1');
-    });
-    
-    Future.delayed(new Duration(seconds: 2), (){
-      sub2.add('frist event..2');
-    });
-    Future.delayed(new Duration(seconds: 3), (){
-      sub3.add('frist event.. 3');
-    });
-
     this.api.newcall('staff/create', {'doc' : doc}).stream.listen(
       (res){
           print(res);
