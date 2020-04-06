@@ -140,26 +140,57 @@ class _MyHomePageState extends State<MyHomePage> {
     //   // }  
     // });
 
+    List<Stream> fileUploads = [];
+
+    BehaviorSubject<String> sub1 = new BehaviorSubject<String>();
+    BehaviorSubject<String> sub2 = new BehaviorSubject<String>();
+    BehaviorSubject<String> sub3 = new BehaviorSubject<String>();
+
+    Stream strm1 =  sub1.stream;
+    Stream strm2 =  sub2.stream;
+    Stream strm3 =  sub3.stream;
+
+    // fileUploads.addAll([strm1]);
     
     CombineLatestStream(
-      [
-        Stream.fromIterable(['a']),
-        Stream.fromIterable(['b']),
-        Stream.fromIterable(['C', 'D'])
-      ],
-      (values) => values.last
-    )
-    .listen(print);
+      fileUploads,
+      (values)=> values.last
+    ).listen(
+      (data){
+        print('data receive$data');
+      },
+      onDone: (){
+        print('done listiner');
+      }, onError: (err){
+        print('error msg');
+      }
+    );
 
-    // this.api.newcall('staff/create', {'doc' : doc}).stream.listen(
-    //   (res){
-    //       print(res);
-    //   }, onError: (err){
-    //     print(err);
-    //   }, onDone: (){
-    //     print('upload call complete');
-    //   }
-    // );
+    // Rx.combineLatestList(fileUploads).doOnDone((){
+    //   print('done....');
+    // }).listen(null);
+
+  fileUploads.add(strm3);
+    Future.delayed(new Duration(seconds: 1), (){
+      sub1.add('frist event..1');
+    });
+    
+    Future.delayed(new Duration(seconds: 2), (){
+      sub2.add('frist event..2');
+    });
+    Future.delayed(new Duration(seconds: 3), (){
+      sub3.add('frist event.. 3');
+    });
+
+    this.api.newcall('staff/create', {'doc' : doc}).stream.listen(
+      (res){
+          print(res);
+      }, onError: (err){
+        print(err);
+      }, onDone: (){
+        print('upload call complete');
+      }
+    );
   }
   void readCall() {
 

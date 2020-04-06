@@ -402,7 +402,7 @@ ApiService() {
   }
 
 StreamController<dynamic> newcall(String endpoint, dynamic callArgs,[ bool awaitAuth = false]) {
-    print('start calling new call..');
+    print('start calling new call.. ');
     dynamic apiCall = {
       'endpoint' : endpoint != null? endpoint : callArgs['endpoint'],
       'sid' : (this.cache.getString('sid') != null)? this.cache.getString('sid'): "f00000000000000000000012",
@@ -418,60 +418,77 @@ StreamController<dynamic> newcall(String endpoint, dynamic callArgs,[ bool await
     List<Stream> fileUploads = [];
     List<File> files;
 
+
+    BehaviorSubject<dynamic> start = new BehaviorSubject<dynamic>();
+    fileUploads.add(start.stream);
+
     if( callArgs['doc'] != null)
-    callArgs['doc'].forEach((key,value){
+      callArgs['doc'].forEach((key,value) {
       if(value[0].runtimeType.toString() == '_File'){
 
         print(value);
         files =  value;
         callArgs['doc'][key] = [];
 
+        apiCall['doc'][key] = [];
 
-       files.forEach((file) async {
-         BehaviorSubject<dynamic> upload = new BehaviorSubject<dynamic>();
+        files.forEach((file)   {
+        //  BehaviorSubject<dynamic> upload = new BehaviorSubject<dynamic>();
           // fileUploads.add(upload.stream);
-          callArgs['doc'][key].add(file.path.split('/')[file.path.split('/').length -1]);
+          apiCall['doc'][key].add(file.path.split('/')[file.path.split('/').length -1]);
+          Stream upload = this.uploadFile(file, apiCall, key).asStream().asBroadcastStream();
+          fileUploads.add(upload);
+          upload.listen(
+            (res){
+              apiCall['doc'][key][0] = {'__file' : res.data['args']['docs'][0]['_id']};
+            },onDone: (){}
+          );
           
-          print('start uploading .......');
-          var url =this.config.api.replaceFirst('ws', 'http').replaceAll('/ws', '') + '/file/create' ;
-
-          var dio = Dio();
-          dio.interceptors.add(LogInterceptor(responseBody: true));
+          // apiCall['doc'][key].add(file.path.split('/')[file.path.split('/').length -1]);
           
-          FormData formData = new FormData.fromMap({
-            "__module" : apiCall['endpoint'].split('/')[0],     
-						"__attr" : key,    
-						"name" : file.path.split('/')[file.path.split('/').length -1],
-						"type" : 'image/jpeg', 
-						"lastModified" : (new DateTime.now().millisecondsSinceEpoch / 1000).toString().split('.')[0],  						
-            "file": await MultipartFile.fromFile(file.path,filename: file.path.split('/')[file.path.split('/').length -1]), ///nother exception was thrown: type 'String' is not a subtype of type 'File' of 'value'
-          });
+          // print('start uploading .......$apiCall');
+          // var url =this.config.api.replaceFirst('ws', 'http').replaceAll('/ws', '') + '/file/create' ;
 
-
-          var response;
-          try {
-            response= await dio.post(url, data: formData, 
-            options: Options(
-             headers: {
-              'Content-Type': 'multipart/form-data',
-							'X-Auth-Bearer': apiCall['sid'],
-							'X-Auth-Token': apiCall['token'],
-							'X-Auth-App': 'this.config.appId',
-            }
-           ),
-           );
-          } on DioError catch (e) {
-            if(e.response != null){
-              print(e.response.data);
-            } else print(e.message);
-          }
-
-          // callArgs.doc[attr][i] = { __file: res.args.docs[0]._id };
-          callArgs['doc'][key][0] = {'__file' : response.data['args']['docs'][0]['_id']};
+          // var dio = Dio();
+          // dio.interceptors.add(LogInterceptor(responseBody: true));
           
-          upload.add(response.data);
-          upload.close();
-          print('file upload results.... ${response.data['args']['docs'][0]['_id']}');   
+          // FormData formData = new FormData.fromMap({
+          //   "__module" : apiCall['endpoint'].split('/')[0],     
+					// 	"__attr" : key,    
+					// 	"name" : file.path.split('/')[file.path.split('/').length -1],
+					// 	"type" : 'image/jpeg', 
+					// 	"lastModified" : (new DateTime.now().millisecondsSinceEpoch / 1000).toString().split('.')[0],  						
+          //   "file": await MultipartFile.fromFile(file.path,filename: file.path.split('/')[file.path.split('/').length -1]), ///nother exception was thrown: type 'String' is not a subtype of type 'File' of 'value'
+          // });
+
+
+          // var response;
+          // try {
+          //   response= await dio.post(url, data: formData, 
+          //   options: Options(
+          //    headers: {
+          //     'Content-Type': 'multipart/form-data',
+					// 		'X-Auth-Bearer': apiCall['sid'],
+					// 		'X-Auth-Token': apiCall['token'],
+					// 		'X-Auth-App': 'this.config.appId',
+          //   }
+          //  ),
+          //  );
+          // } on DioError catch (e) {
+          //   if(e.response != null){
+          //     print(e.response.data);
+          //   } else print(e.message);
+          // }
+
+          // // callArgs.doc[attr][i] = { __file: res.args.docs[0]._id };
+          // apiCall['doc'][key][0] = {'__file' : response.data['args']['docs'][0]['_id']};
+          
+          // upload.add(response.data);
+
+
+
+          // fileUploads.add(this.uploadFile(file, apiCall, apiCall['doc'][key]).asStream());
+          // print('file upload results.... ${apiCall}');   
           
         });
 
@@ -483,26 +500,13 @@ StreamController<dynamic> newcall(String endpoint, dynamic callArgs,[ bool await
     if(this.inited && !awaitAuth) print('second...');
 
     if(endpoint == 'conn/verify') print('third...');
+    start.add('event');
 
     if ((this.inited && awaitAuth && this.authed) || (this.inited && !awaitAuth) || endpoint == 'conn/verify') {
-      print('pre combineLatest...');
-     Rx.combineLatestList(fileUploads).doOnDone((){
-        print('new call combine latest part...');
-         final claimSet = new JwtClaim(
-         otherClaims: <String,dynamic>{...apiCall},
-         maxAge: const Duration(minutes: 2)
-         );
-         String sJWT = issueJwtHS256(claimSet, apiCall['token']);
-         // print('jwt token ${sJWT}');
-        this.conn.websocket.sink.add(jsonEncode({
-           "token" : sJWT,
-           "call_id" : apiCall['call_id'] 
-           }));
-       
-     }).listen(null);
+      print('pre combineLatest...$apiCall');
       CombineLatestStream(fileUploads, (combiner){
 
-        print('new call combine latest part...');
+        // print('new call combine latest part...${apiCall}  $combiner');
          final claimSet = new JwtClaim(
          otherClaims: <String,dynamic>{...apiCall},
          maxAge: const Duration(minutes: 2)
@@ -513,7 +517,7 @@ StreamController<dynamic> newcall(String endpoint, dynamic callArgs,[ bool await
            "token" : sJWT,
            "call_id" : apiCall['call_id'] 
            }));
-      });
+      }).listen(null);
     } else {
       if(awaitAuth){
         this.authQueue.add(apiCall);
@@ -550,6 +554,9 @@ StreamController<dynamic> newcall(String endpoint, dynamic callArgs,[ bool await
 
   Future<dynamic> uploadFile(File _image, dynamic callArgs, String attr ) async {
 
+    StreamController<dynamic> call = new StreamController<dynamic>();
+
+
           var url =this.config.api.replaceFirst('ws', 'http').replaceAll('/ws', '') + '/file/create' ;
 
           var dio = Dio();
@@ -564,7 +571,10 @@ StreamController<dynamic> newcall(String endpoint, dynamic callArgs,[ bool await
             "file": await MultipartFile.fromFile(_image.path,filename: _image.path.split('/')[_image.path.split('/').length -1]), ///nother exception was thrown: type 'String' is not a subtype of type 'File' of 'value'
           });
 
-          var response = await dio.post(url, data: formData, 
+
+          var response;
+          // try {
+            response=  await dio.post(url, data: formData, 
             options: Options(
              headers: {
               'Content-Type': 'multipart/form-data',
@@ -572,16 +582,21 @@ StreamController<dynamic> newcall(String endpoint, dynamic callArgs,[ bool await
 							'X-Auth-Token': callArgs['token'],
 							'X-Auth-App': 'this.config.appId',
             }
-          )
-        );
-
+           ),
+           );
+          // } on DioError catch (e) {
+          //   if(e.response != null){
+          //     print(e.response.data);
+          //   } else print(e.message);
+          // }
         print('file upload results.... $response');
+        call.add(response);
 
         return response;
   }
 
   void close(){
-    this.call('conn/close',{
+    this.newcall('conn/close',{
       'query' : [],
       'doc' : {}
     });
@@ -669,10 +684,10 @@ void auth(String authVar,String authVal,String password){
 
   String generateAuthHash( String authVar,String authVal,String password) {
     
-    var passHash = PassCrypt('SHA-512/HMAC/PBKDF2');
-    var keycryp= passHash.hashPass("\$%^789qwe:+971501234567", "phone:+971501234567:\$%^789qwe:__ANON_TOKEN_f00000000000000000000012",64);
+    // var passHash = PassCrypt('SHA-512/HMAC/PBKDF2');
+    // var keycryp= passHash.hashPass("\$%^789qwe:+971501234567", "phone:+971501234567:\$%^789qwe:__ANON_TOKEN_f00000000000000000000012",64);
 
-    print( 'new cryto key is ${keycryp}');  
+    // print( 'new cryto key is ${keycryp}');  
   
 
     if(config.authHashLevel != '6.1'){
